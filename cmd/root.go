@@ -40,6 +40,10 @@ Get started:
   mochi --help                         # Show all commands`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		// Check for updates after command execution
+		notifyUpdateAvailable()
+	},
 }
 
 // Execute runs the root command

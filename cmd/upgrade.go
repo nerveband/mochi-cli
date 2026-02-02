@@ -1,133 +1,184 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
+	"time"
 
-	"github.com/fatih/color"
-	"github.com/inconshreveable/go-update"
+	"github.com/creativeprojects/go-selfupdate"
 	"github.com/spf13/cobra"
 )
 
-const (
-	repoOwner = "nerveband"
-	repoName  = "mochi-cli"
-)
+const repoOwner = "nerveband"
+const repoName = "mochi-cli"
 
-// upgradeCmd represents the upgrade command
-var upgradeCmd = &cobra.Command{
-	Use:   "upgrade",
-	Short: "Upgrade to the latest version",
-	Long:  `Check for and install the latest version of mochi-cli.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		checkOnly, _ := cmd.Flags().GetBool("check")
-
-		if !quiet {
-			fmt.Println("Checking for updates...")
-		}
-
-		latest, err := getLatestRelease()
-		if err != nil {
-			return fmt.Errorf("failed to check for updates: %w", err)
-		}
-
-		if latest.TagName == versionString {
-			if !quiet {
-				fmt.Printf("You're already on the latest version: %s\n", versionString)
-			}
-			return nil
-		}
-
-		if checkOnly {
-			if !quiet {
-				fmt.Printf("A new version is available: %s (current: %s)\n", latest.TagName, versionString)
-				fmt.Println("Run 'mochi upgrade' to update")
-			}
-			return nil
-		}
-
-		if !quiet {
-			fmt.Printf("New version available: %s (current: %s)\n", latest.TagName, versionString)
-			fmt.Println("Downloading update...")
-		}
-
-		// Download and apply update
-		if err := performUpdate(latest); err != nil {
-			return fmt.Errorf("failed to update: %w", err)
-		}
-
-		if !quiet {
-			color.Green("Successfully upgraded to %s!\n", latest.TagName)
-		}
-
-		return nil
-	},
+// updateCheckCache stores the last version check
+type updateCheckCache struct {
+	LastCheck      time.Time `json:"last_check"`
+	LatestVersion  string    `json:"latest_version"`
+	UpdateRequired bool      `json:"update_required"`
 }
 
-// GitHubRelease represents a GitHub release
-type GitHubRelease struct {
-	TagName string `json:"tag_name"`
-	Assets  []struct {
-		Name               string `json:"name"`
-		BrowserDownloadURL string `json:"browser_download_url"`
-	} `json:"assets"`
+// checkForUpdates checks if a new version is available (without installing)
+func checkForUpdates() (hasUpdate bool, latestVersion string, err error) {
+	// Check cache first (only check once per day)
+	cached, err := loadUpdateCache()
+	if err == nil && time.Since(cached.LastCheck) < 24*time.Hour {
+		return cached.UpdateRequired, cached.LatestVersion, nil
+	}
+
+	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
+	if err != nil {
+		return false, "", err
+	}
+
+	updater, err := selfupdate.NewUpdater(selfupdate.Config{
+		Source:    source,
+		Validator: &selfupdate.ChecksumValidator{UniqueFilename: "checksums.txt"},
+	})
+	if err != nil {
+		return false, "", err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	latest, found, err := updater.DetectLatest(ctx, selfupdate.NewRepositorySlug(repoOwner, repoName))
+	if err != nil || !found {
+		return false, "", err
+	}
+
+	hasUpdate = latest.GreaterThan(versionString)
+	latestVer := latest.Version()
+
+	// Save to cache
+	saveUpdateCache(updateCheckCache{
+		LastCheck:      time.Now(),
+		LatestVersion:  latestVer,
+		UpdateRequired: hasUpdate,
+	})
+
+	return hasUpdate, latestVer, nil
 }
 
-func getLatestRelease() (*GitHubRelease, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName)
+// notifyUpdateAvailable shows update notification if not in quiet mode
+func notifyUpdateAvailable() {
+	if quiet {
+		return
+	}
 
-	resp, err := http.Get(url)
+	hasUpdate, latestVersion, err := checkForUpdates()
+	if err != nil || !hasUpdate {
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "\n🎁 New version available: %s (current: %s)\n", latestVersion, versionString)
+	fmt.Fprintf(os.Stderr, "Run 'mochi upgrade' to update\n\n")
+}
+
+// loadUpdateCache loads the cached update check result
+func loadUpdateCache() (*updateCheckCache, error) {
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	var release GitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	cachePath := filepath.Join(homeDir, ".mochi-cli", "update_cache.json")
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
 		return nil, err
 	}
 
-	return &release, nil
+	var cache updateCheckCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, err
+	}
+
+	return &cache, nil
 }
 
-func performUpdate(release *GitHubRelease) error {
-	// Determine correct asset for current platform
-	assetName := fmt.Sprintf("mochi-cli_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
-
-	var downloadURL string
-	for _, asset := range release.Assets {
-		if asset.Name == assetName {
-			downloadURL = asset.BrowserDownloadURL
-			break
-		}
-	}
-
-	if downloadURL == "" {
-		return fmt.Errorf("no suitable binary found for %s/%s", runtime.GOOS, runtime.GOARCH)
-	}
-
-	// Download binary
-	resp, err := http.Get(downloadURL)
+// saveUpdateCache saves the update check result to cache
+func saveUpdateCache(cache updateCheckCache) error {
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("download failed with status %d", resp.StatusCode)
+	configDir := filepath.Join(homeDir, ".mochi-cli")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return err
 	}
 
-	// Apply update
-	return update.Apply(resp.Body, update.Options{})
+	cachePath := filepath.Join(configDir, "update_cache.json")
+	data, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(cachePath, data, 0644)
+}
+
+var upgradeCmd = &cobra.Command{
+	Use:   "upgrade",
+	Short: "Upgrade mochi-cli to the latest version",
+	Long:  "Check for and install the latest version of mochi-cli from GitHub releases",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runUpgrade()
+	},
 }
 
 func init() {
 	rootCmd.AddCommand(upgradeCmd)
-	upgradeCmd.Flags().Bool("check", false, "Only check for updates, don't install")
+}
+
+func runUpgrade() error {
+	fmt.Printf("Current version: %s\n", versionString)
+	fmt.Printf("Checking for updates...\n")
+
+	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
+	if err != nil {
+		return fmt.Errorf("failed to create update source: %w", err)
+	}
+
+	updater, err := selfupdate.NewUpdater(selfupdate.Config{
+		Source:    source,
+		Validator: &selfupdate.ChecksumValidator{UniqueFilename: "checksums.txt"},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create updater: %w", err)
+	}
+
+	latest, found, err := updater.DetectLatest(context.Background(), selfupdate.NewRepositorySlug(repoOwner, repoName))
+	if err != nil {
+		return fmt.Errorf("failed to check for updates: %w", err)
+	}
+
+	if !found {
+		fmt.Println("No releases found")
+		return nil
+	}
+
+	if latest.LessOrEqual(versionString) {
+		fmt.Printf("Already up to date (latest: %s)\n", latest.Version())
+		return nil
+	}
+
+	fmt.Printf("New version available: %s\n", latest.Version())
+	fmt.Printf("Downloading for %s/%s...\n", runtime.GOOS, runtime.GOARCH)
+
+	exe, err := selfupdate.ExecutablePath()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	if err := updater.UpdateTo(context.Background(), latest, exe); err != nil {
+		return fmt.Errorf("failed to update: %w", err)
+	}
+
+	fmt.Printf("Successfully upgraded to %s\n", latest.Version())
+	return nil
 }
