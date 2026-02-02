@@ -1,21 +1,22 @@
 {
-  "name": "mochi-cli-video",
+  "name": "mochi-cli-promo",
   "version": "1.0.0",
   "description": "Promotional video for mochi-cli",
   "scripts": {
-    "dev": "remotion studio",
-    "build": "remotion render src/index.tsx MochiCLIDemo out/demo.mp4",
-    "preview": "remotion preview src/index.tsx"
+    "start": "remotion studio",
+    "build": "remotion render src/index.tsx MochiCliPromo out/mochi-cli-promo.mp4",
+    "render": "remotion render src/index.tsx MochiCliPromo out/mochi-cli-promo.mp4"
   },
   "dependencies": {
-    "@remotion/cli": "^4.0.0",
-    "@remotion/player": "^4.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "remotion": "^4.0.0"
+    "@remotion/bundler": "^4.0.409",
+    "@remotion/cli": "^4.0.409",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "remotion": "^4.0.409"
   },
   "devDependencies": {
-    "@types/react": "^18.2.0",
-    "typescript": "^5.0.0"
+    "@types/react": "^19.2.9",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3"
   }
 }

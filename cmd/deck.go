@@ -324,12 +324,12 @@ func init() {
 	deckCmd.AddCommand(deckDeleteCmd)
 
 	// Create flags
-	deckCreateCmd.Flags().StringP("parent", "p", "", "Parent deck ID")
+	deckCreateCmd.Flags().StringP("parent", "P", "", "Parent deck ID")
 	deckCreateCmd.Flags().IntP("sort", "s", 0, "Sort order")
 
 	// Update flags
 	deckUpdateCmd.Flags().StringP("name", "n", "", "New name")
-	deckUpdateCmd.Flags().StringP("parent", "p", "", "Parent deck ID")
+	deckUpdateCmd.Flags().StringP("parent", "P", "", "Parent deck ID")
 	deckUpdateCmd.Flags().IntP("sort", "s", 0, "Sort order")
 	deckUpdateCmd.Flags().Bool("archive", false, "Archive the deck")
 	deckUpdateCmd.Flags().Bool("unarchive", false, "Unarchive the deck")

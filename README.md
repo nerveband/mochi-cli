@@ -2,7 +2,7 @@
 
 A powerful command-line interface for [Mochi.cards](https://mochi.cards) - manage flashcards, decks, and templates from the command line. Built for LLMs and automation workflows.
 
-![Mochi CLI Demo](video/demo.gif)
+![Mochi CLI Demo](mochi-demo.gif)
 
 ## Features
 

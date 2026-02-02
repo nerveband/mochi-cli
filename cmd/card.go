@@ -306,7 +306,23 @@ var cardUpdateCmd = &cobra.Command{
 			return nil
 		}
 
-		updated, err := client.UpdateCard(cardID, update)
+		payload := map[string]interface{}{}
+		if content != "" {
+			payload["content"] = content
+		}
+		if name != "" {
+			payload["name"] = name
+		}
+		if deckID != "" {
+			payload["deck-id"] = deckID
+		}
+		if archived {
+			payload["archived?"] = true
+		} else if unarchive {
+			payload["archived?"] = false
+		}
+
+		updated, err := client.UpdateCardFields(cardID, payload)
 		if err != nil {
 			return err
 		}
@@ -444,7 +460,7 @@ func init() {
 	cardCreateCmd.Flags().StringP("content", "c", "", "Card content (markdown)")
 	cardCreateCmd.Flags().StringP("name", "n", "", "Card name")
 	cardCreateCmd.Flags().StringP("template", "t", "", "Template ID")
-	cardCreateCmd.Flags().StringP("file", "f", "", "Read content from file")
+	cardCreateCmd.Flags().StringP("file", "F", "", "Read content from file")
 	cardCreateCmd.Flags().Bool("stdin", false, "Read content from stdin")
 
 	// Update flags
@@ -453,7 +469,7 @@ func init() {
 	cardUpdateCmd.Flags().StringP("deck", "d", "", "Move to different deck")
 	cardUpdateCmd.Flags().Bool("archive", false, "Archive the card")
 	cardUpdateCmd.Flags().Bool("unarchive", false, "Unarchive the card")
-	cardUpdateCmd.Flags().StringP("file", "f", "", "Read content from file")
+	cardUpdateCmd.Flags().StringP("file", "F", "", "Read content from file")
 	cardUpdateCmd.Flags().Bool("stdin", false, "Read content from stdin")
 
 	// Delete flags

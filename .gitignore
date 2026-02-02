@@ -8,3 +8,5 @@ mochi-cli
 mochi
 vendor/
 node_modules/
+video/out/
+*.mp4

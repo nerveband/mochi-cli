@@ -1,6 +1,62 @@
 package models
 
-import "time"
+import (
+	"encoding/json"
+	"strings"
+	"time"
+)
+
+// MochiTime handles Mochi API time formats.
+type MochiTime struct {
+	time.Time
+}
+
+// UnmarshalJSON accepts RFC3339 strings or {"date": "..."} objects.
+func (t *MochiTime) UnmarshalJSON(data []byte) error {
+	if t == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		return nil
+	}
+	if strings.HasPrefix(trimmed, "\"") {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		if s == "" {
+			return nil
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, s)
+		if err != nil {
+			parsed, err = time.Parse(time.RFC3339, s)
+			if err != nil {
+				return err
+			}
+		}
+		t.Time = parsed
+		return nil
+	}
+	var obj struct {
+		Date string `json:"date"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	if obj.Date == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, obj.Date)
+	if err != nil {
+		parsed, err = time.Parse(time.RFC3339, obj.Date)
+		if err != nil {
+			return err
+		}
+	}
+	t.Time = parsed
+	return nil
+}
 
 // Card represents a flashcard in Mochi
 type Card struct {
@@ -14,12 +70,12 @@ type Card struct {
 	ManualTags    []string         `json:"manual-tags,omitempty"`
 	Archived      bool             `json:"archived?"`
 	ReviewReverse bool             `json:"review-reverse?"`
-	Trashed       *time.Time       `json:"trashed?"`
+	Trashed       *MochiTime       `json:"trashed?"`
 	New           bool             `json:"new?"`
 	References    []string         `json:"references"`
 	Reviews       []Review         `json:"reviews"`
-	CreatedAt     time.Time        `json:"created-at"`
-	UpdatedAt     time.Time        `json:"updated-at"`
+	CreatedAt     *MochiTime       `json:"created-at"`
+	UpdatedAt     *MochiTime       `json:"updated-at"`
 }
 
 // Field represents a template field value
@@ -30,9 +86,9 @@ type Field struct {
 
 // Review represents a card review record
 type Review struct {
-	Date       time.Time `json:"date"`
-	Due        time.Time `json:"due"`
-	Remembered bool      `json:"remembered?"`
+	Date       *MochiTime `json:"date"`
+	Due        *MochiTime `json:"due"`
+	Remembered bool       `json:"remembered?"`
 }
 
 // Deck represents a deck (collection) in Mochi
@@ -42,7 +98,7 @@ type Deck struct {
 	ParentID        string     `json:"parent-id,omitempty"`
 	Sort            int        `json:"sort"`
 	Archived        bool       `json:"archived?"`
-	Trashed         *time.Time `json:"trashed?"`
+	Trashed         *MochiTime `json:"trashed?"`
 	SortBy          string     `json:"sort-by,omitempty"`
 	CardsView       string     `json:"cards-view,omitempty"`
 	ShowSides       bool       `json:"show-sides?"`

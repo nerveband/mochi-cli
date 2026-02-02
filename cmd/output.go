@@ -7,9 +7,9 @@ import (
 	"os"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/fatih/color"
+	"github.com/nerveband/mochi-cli/internal/models"
 )
 
 // printJSON prints data as formatted JSON
@@ -159,8 +159,9 @@ func truncateString(s string, max int) string {
 }
 
 // formatTime formats a time value
-func formatTime(t time.Time) string {
-	if t.IsZero() {
+
+func formatTime(t *models.MochiTime) string {
+	if t == nil || t.IsZero() {
 		return ""
 	}
 	return t.Format("2006-01-02 15:04")

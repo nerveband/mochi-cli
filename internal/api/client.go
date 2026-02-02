@@ -117,11 +117,37 @@ func (c *Client) ListCards(deckID string, limit int, bookmark string) (*models.P
 		return nil, err
 	}
 
-	var result models.PaginatedResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, err
 	}
 
+	var result models.PaginatedResponse
+	if bm, ok := raw["bookmark"]; ok {
+		_ = json.Unmarshal(bm, &result.Bookmark)
+	}
+	if docsRaw, ok := raw["docs"]; ok {
+		var docs []interface{}
+		if err := json.Unmarshal(docsRaw, &docs); err != nil {
+			return nil, err
+		}
+		result.Docs = docs
+		return &result, nil
+	}
+	if cardsRaw, ok := raw["cards"]; ok {
+		var cards []models.Card
+		if err := json.Unmarshal(cardsRaw, &cards); err != nil {
+			return nil, err
+		}
+		docs := make([]interface{}, len(cards))
+		for i, card := range cards {
+			docs[i] = card
+		}
+		result.Docs = docs
+		return &result, nil
+	}
+
+	result.Docs = []interface{}{}
 	return &result, nil
 }
 
@@ -158,7 +184,24 @@ func (c *Client) GetCard(cardID string) (*models.Card, error) {
 func (c *Client) CreateCard(card *models.Card) (*models.Card, error) {
 	url := baseURL + "/cards"
 
-	body, err := json.Marshal(card)
+	payload := map[string]interface{}{
+		"deck-id": card.DeckID,
+		"content": card.Content,
+	}
+	if card.Name != "" {
+		payload["name"] = card.Name
+	}
+	if card.TemplateID != "" {
+		payload["template-id"] = card.TemplateID
+	}
+	if len(card.Fields) > 0 {
+		payload["fields"] = card.Fields
+	}
+	if len(card.ManualTags) > 0 {
+		payload["manual-tags"] = card.ManualTags
+	}
+
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -181,19 +224,60 @@ func (c *Client) CreateCard(card *models.Card) (*models.Card, error) {
 		return nil, err
 	}
 
-	var created models.Card
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	var createdResp struct {
+		ID         string `json:"id"`
+		Content    string `json:"content"`
+		Name       string `json:"name"`
+		DeckID     string `json:"deck-id"`
+		TemplateID string `json:"template-id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&createdResp); err != nil {
 		return nil, err
 	}
 
-	return &created, nil
+	created := &models.Card{
+		ID:         createdResp.ID,
+		Content:    createdResp.Content,
+		Name:       createdResp.Name,
+		DeckID:     createdResp.DeckID,
+		TemplateID: createdResp.TemplateID,
+	}
+
+	return created, nil
 }
 
 // UpdateCard updates an existing card
 func (c *Client) UpdateCard(cardID string, card *models.Card) (*models.Card, error) {
+	payload := map[string]interface{}{}
+	if card.Content != "" {
+		payload["content"] = card.Content
+	}
+	if card.Name != "" {
+		payload["name"] = card.Name
+	}
+	if card.DeckID != "" {
+		payload["deck-id"] = card.DeckID
+	}
+	if card.TemplateID != "" {
+		payload["template-id"] = card.TemplateID
+	}
+	if len(card.Fields) > 0 {
+		payload["fields"] = card.Fields
+	}
+	if len(card.ManualTags) > 0 {
+		payload["manual-tags"] = card.ManualTags
+	}
+	if card.Archived {
+		payload["archived?"] = true
+	}
+
+	return c.UpdateCardFields(cardID, payload)
+}
+
+func (c *Client) UpdateCardFields(cardID string, payload map[string]interface{}) (*models.Card, error) {
 	url := baseURL + "/cards/" + cardID
 
-	body, err := json.Marshal(card)
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -216,12 +300,26 @@ func (c *Client) UpdateCard(cardID string, card *models.Card) (*models.Card, err
 		return nil, err
 	}
 
-	var updated models.Card
-	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+	var updatedResp struct {
+		ID         string `json:"id"`
+		Content    string `json:"content"`
+		Name       string `json:"name"`
+		DeckID     string `json:"deck-id"`
+		TemplateID string `json:"template-id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&updatedResp); err != nil {
 		return nil, err
 	}
 
-	return &updated, nil
+	updated := &models.Card{
+		ID:         updatedResp.ID,
+		Content:    updatedResp.Content,
+		Name:       updatedResp.Name,
+		DeckID:     updatedResp.DeckID,
+		TemplateID: updatedResp.TemplateID,
+	}
+
+	return updated, nil
 }
 
 // DeleteCard permanently deletes a card
@@ -384,7 +482,17 @@ func (c *Client) GetDeck(deckID string) (*models.Deck, error) {
 func (c *Client) CreateDeck(deck *models.Deck) (*models.Deck, error) {
 	url := baseURL + "/decks"
 
-	body, err := json.Marshal(deck)
+	payload := map[string]interface{}{
+		"name": deck.Name,
+	}
+	if deck.ParentID != "" {
+		payload["parent-id"] = deck.ParentID
+	}
+	if deck.Sort != 0 {
+		payload["sort"] = deck.Sort
+	}
+
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
