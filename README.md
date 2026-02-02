@@ -417,6 +417,24 @@ MIT License - see [LICENSE](LICENSE) file
 
 ## For LLMs
 
+### LLM Agent Skill
+
+**Want your LLM agent to use mochi-cli automatically?**
+
+Install the Mochi skill for Claude Code, Claude Desktop, or other LLM tools:
+
+```bash
+# Copy to Claude skills directory
+cp -r skill ~/.claude/skills/mochi
+
+# Or use skillshare
+skillshare install https://github.com/nerveband/mochi-cli
+```
+
+See [`skill/README.md`](skill/README.md) for details.
+
+### Manual Integration
+
 When working with this CLI:
 
 1. **Always check version first**: `mochi version`
@@ -442,5 +460,6 @@ done
 
 ## Documentation for LLMs
 
+- [LLM Skill](skill/SKILL.md) - Complete skill guide for LLM agents
 - [LLM Quick Reference](docs/llm/README.md) - Essential patterns and examples
 - [Integration Guide](docs/llm/integration-guide.md) - Deep dive into LLM workflows
