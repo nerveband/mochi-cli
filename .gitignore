@@ -7,3 +7,4 @@ coverage.out
 mochi-cli
 mochi
 vendor/
+node_modules/
